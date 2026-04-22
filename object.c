@@ -94,9 +94,45 @@ int object_exists(const ObjectID *id) {
 //
 // Returns 0 on success, -1 on error.
 int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out) {
-    // TODO: Implement
-    (void)type; (void)data; (void)len; (void)id_out;
-    return -1;
+    char header[64];
+    const char *type_str =
+        (type == OBJ_BLOB) ? "blob" :
+        (type == OBJ_TREE) ? "tree" : "commit";
+
+    int header_len = snprintf(header, sizeof(header), "%s %zu", type_str, len) + 1;
+
+    size_t total_len = header_len + len;
+    unsigned char *buffer = malloc(total_len);
+
+    memcpy(buffer, header, header_len);
+    memcpy(buffer + header_len, data, len);
+
+    compute_hash(buffer, total_len, id_out);
+
+    if (object_exists(id_out)) {
+        free(buffer);
+        return 0;
+    }
+
+    mkdir(".pes", 0755);
+    mkdir(".pes/objects", 0755);
+
+    char hex[65];
+    hash_to_hex(id_out, hex);
+
+    char dir[256];
+    snprintf(dir, sizeof(dir), ".pes/objects/%.2s", hex);
+    mkdir(dir, 0755);
+
+    char path[512];
+    snprintf(path, sizeof(path), "%s/%s", dir, hex + 2);
+
+    FILE *f = fopen(path, "wb");
+    fwrite(buffer, 1, total_len, f);
+    fclose(f);
+
+    free(buffer);
+    return 0;
 }
 
 // Read an object from the store.
